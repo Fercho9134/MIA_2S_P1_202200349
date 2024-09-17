@@ -47,7 +47,7 @@ func main() {
         }
     }()
 
-    log.Println("Servidor iniciado en :8080")
+    log.Println("Servidor iniciado en :8080 :b")
 
     // Espera la señal de interrupción
     <-stop

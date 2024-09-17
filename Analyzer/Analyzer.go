@@ -94,7 +94,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 				particionesMontadas := DiskManagement.GetMountedPartitions()
 				for _, particiones := range particionesMontadas {
 					for _, particion := range particiones {
-						
+
 						particionesMontadasTxt += fmt.Sprintf("\tPath: %s, Name: %s, ID: %s, Status: %d\n", particion.Path, particion.Name, particion.ID, particion.Status)
 					}
 				}
@@ -381,9 +381,9 @@ func fn_rep(params string) error {
 		}
 
 		pathReporte := *path
-		if err:= Utilities.GenerateReportMBR(TempMBR, ebrs, pathReporte, file); err != nil {
+		if err := Utilities.GenerateReportMBR(TempMBR, ebrs, pathReporte, file); err != nil {
 			return fmt.Errorf("Error: %s", err.Error())
-		}else{
+		} else {
 			log.Println("Reporte MBR generado exitosamente")
 			dotFile := strings.TrimSuffix(pathReporte, filepath.Ext(pathReporte)) + ".dot"
 			outupPng := strings.TrimSuffix(pathReporte, filepath.Ext(pathReporte)) + ".png"
@@ -392,14 +392,78 @@ func fn_rep(params string) error {
 			err := cmd.Run()
 			if err != nil {
 				return fmt.Errorf("Error: %s", err.Error())
-			}else{
+			} else {
 				log.Println("Imagen generada exitosamente")
 			}
 		}
 
-	}
+	case "disk":
+		//Generamos el reporte del disco
+		file, err := Utilities.OpenFile(pathDisco)
 
-	log.Println(path_file_ls)
+		fileName := filepath.Base(pathDisco)
+
+
+		if err != nil {
+			return fmt.Errorf("Error: %s", err.Error())
+		}
+		defer file.Close()
+
+		var TempMBR Structs.MRB
+		if err := Utilities.ReadObject(file, &TempMBR, 0); err != nil {
+			return fmt.Errorf("Error: %s", err.Error())
+		}
+
+		var ebrs []Structs.EBR
+		for i := 0; i < 4; i++ {
+			if string(TempMBR.Partitions[i].Type[:]) == "e" {
+				log.Println("Partición extendida encontrada", string(TempMBR.Partitions[i].Name[:]))
+
+				ebrPosition := TempMBR.Partitions[i].Start
+
+				//Leemos todos los ebrs de la partición extendida
+				for ebrPosition != -1 {
+					log.Println("Leyendo EBR en posicion", ebrPosition)
+					var TempEBR Structs.EBR
+					if err := Utilities.ReadObject(file, &TempEBR, int64(ebrPosition)); err != nil {
+						return fmt.Errorf("Error: %s", err.Error())
+					}
+
+					ebrs = append(ebrs, TempEBR)
+
+					ebrPosition = TempEBR.PartNext
+
+					if ebrPosition == -1 {
+						break
+					}
+				}
+			}
+
+		}
+
+		totalDiskSize := TempMBR.MbrSize
+		pathReporte := *path
+		if err := Utilities.GenerateReportDisk(TempMBR, ebrs, pathReporte, file, totalDiskSize, fileName); err != nil {
+			return fmt.Errorf("Error: %s", err.Error())
+		} else {
+			log.Println("Reporte Disk generado exitosamente")
+			dotFile := strings.TrimSuffix(pathReporte, filepath.Ext(pathReporte)) + ".dot"
+			outupPng := strings.TrimSuffix(pathReporte, filepath.Ext(pathReporte)) + ".png"
+
+			cmd := exec.Command("dot", "-Tpng", dotFile, "-o", outupPng)
+			err := cmd.Run()
+			if err != nil {
+				return fmt.Errorf("Error: %s", err.Error())
+			} else {
+				log.Println("Imagen generada exitosamente")
+			}
+		}
+
+		log.Println(path_file_ls)
+
+	default:
+		return fmt.Errorf("Error: Reporte %s no encontrado", *name)
+	}
 
 	return nil
 }
